@@ -57,42 +57,45 @@ void doit(int fd) {
     
     // HTTP GET 요청 scan
     sscanf(buf, "%s %s %s", method, uri, version);
-    if (strcasecmp(method, "GET")) {
+    if (!strcasecmp(method, "GET") && !strcasecmp(method, "HEAD")) {
         clienterror(fd, method, "501", "Not implemented",
                     "Tiny does not implement this method");
         return;
     }
     read_requesthdrs(&rio);
 
-    /* Parse URI from GET request */
-    // uri에 cgi-bin 포함 여부로 정적, 동적 컨텐츠로 구분
-    is_static = parse_uri(uri, filename, cgiargs);
-    if (stat(filename, &sbuf) < 0) {
-        clienterror(fd, filename, "404", "Not found",
-                    "Tiny couldn't find this file");
-        return;
-    }
+    if (strcasecmp(method, "GET") == 0) {
+        /* Parse URI from GET request */
+        // uri에 cgi-bin 포함 여부로 정적, 동적 컨텐츠로 구분
+        is_static = parse_uri(uri, filename, cgiargs);
+        if (stat(filename, &sbuf) < 0) {
+            clienterror(fd, filename, "404", "Not found",
+                        "Tiny couldn't find this file");
+            return;
+        }
 
-    if (is_static) { /*Serve static content */
-        // #define S_IRUSR 0400 // 소유자 읽기 권한
-        // #define S_IXUSR 0100 // 소유자 실행 권한
-        // S_ISREG(sbuf.st_mode): 파일이 일반 파일인지 검사
-        // S_IRUSR & sbuf.st_mode: 파일 소유자에 대한 읽기 권한 검사
-        if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
-            clienterror(fd, filename, "403", "Forbidden",
-                        " Tiny couldn't read the file");
-            return;
+        if (is_static) { /*Serve static content */
+            // #define S_IRUSR 0400 // 소유자 읽기 권한
+            // #define S_IXUSR 0100 // 소유자 실행 권한
+            // S_ISREG(sbuf.st_mode): 파일이 일반 파일인지 검사
+            // S_IRUSR & sbuf.st_mode: 파일 소유자에 대한 읽기 권한 검사
+            if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
+                clienterror(fd, filename, "403", "Forbidden",
+                            " Tiny couldn't read the file");
+                return;
+            }
+            serve_static(fd, filename, sbuf.st_size);
+        } else { /* Serve dynamic content */
+            // !(S_IXUSR & sbuf.st_mode): 파일 소유자에게 실행 권한이 있는지 검사
+            if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
+                clienterror(fd, filename, "403", "Forbidden",
+                            "Tiny couldn't run the CGI program");
+                return;
+            }
+            serve_dynamic(fd, filename, cgiargs);
         }
-        serve_static(fd, filename, sbuf.st_size);
-    } else { /* Serve dynamic content */
-        // !(S_IXUSR & sbuf.st_mode): 파일 소유자에게 실행 권한이 있는지 검사
-        if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
-            clienterror(fd, filename, "403", "Forbidden",
-                        "Tiny couldn't run the CGI program");
-            return;
-        }
-        serve_dynamic(fd, filename, cgiargs);
     }
+    
 }
 
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
@@ -192,13 +195,13 @@ void serve_static(int fd, char *filename, int filesize) {
 
     /* Send response body to client */
     srcfd = Open(filename, O_RDONLY, 0);
-    // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
-    srcp = (char *)malloc(filesize + 1);
-    Rio_readn(srcfd, srcp, filesize);
+    srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+    // srcp = (char *)malloc(filesize + 1);
+    // Rio_readn(srcfd, srcp, filesize);
     Close(srcfd);
     Rio_writen(fd, srcp, filesize);
-    // Munmap(srcp, filesize);
-    free(srcp);
+    Munmap(srcp, filesize);
+    // free(srcp);
 }
 
 void serve_dynamic(int fd, char *filename, char *cgiargs) {
