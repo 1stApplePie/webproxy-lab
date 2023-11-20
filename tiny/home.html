@@ -1,7 +1,45 @@
-<html>
-<head><title>test</title></head>
-<body> 
-<img align="middle" src="godzilla.gif">
-Dave O'Hallaron
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Boxes and Button</title>
+</head>
+<body>
+
+<form>
+    <label for="textbox1">Text Box 1:</label>
+    <input type="text" id="textbox1" name="textbox1"><br>
+
+    <label for="textbox2">Text Box 2:</label>
+    <input type="text" id="textbox2" name="textbox2"><br>
+
+    <input type="button" value="Confirm" onclick="callCGI()">
+</form>
+
+<script>
+    function callCGI() {
+        // XMLHttpRequest 객체를 생성
+        var xhr = new XMLHttpRequest();
+        var value1 = document.getElementById("textbox1").value;
+        var value2 = document.getElementById("textbox2").value;
+
+        // 서버에 GET 요청을 보냄
+        xhr.open('GET', '/cgi-bin/adder?'+value1+'&'+value2, true);
+
+        // 서버 응답을 처리
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState == 4 && xhr.status == 200) {
+                // 서버 응답을 alert로 표시
+                alert('Server Response: ' + xhr.responseText);
+            }
+        };
+
+        // 요청 전송
+        xhr.send();
+    }
+</script>
+
 </body>
 </html>
