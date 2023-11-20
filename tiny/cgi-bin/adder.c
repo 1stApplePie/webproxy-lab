@@ -14,7 +14,6 @@ int main(void) {
     }
 
     int a, b;
-    // query_string에서 a와 b의 값을 읽어옴
     if (sscanf(query_string, "a=%d&b=%d", &a, &b) != 2) {
         fprintf(stderr, "Error: Invalid input\n");
         return 1;
