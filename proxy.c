@@ -1,4 +1,5 @@
 #include <stdio.h>
+
 #include "csapp.h"
 
 /* Recommended max cache and object sizes */
@@ -29,9 +30,8 @@ static void send_req_to_server(int, struct Request *);
 static int send_res_to_client(int, int);
 
 int main(int argc, char **argv) {
-    int clientfd, listenfd, connfd = NULL;
+    int listenfd, connfd;
     char hostname[MAXLINE], port[MAXLINE];
-    rio_t rio;
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
 
@@ -57,17 +57,10 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-void proxy(int clientfd) {
-    int is_static;
-    char buf_ser[MAXLINE], buf_cli[MAXLINE];
-    char uri[MAXLINE], filename[MAXLINE], cgiargs[MAXLINE];
-    char default_port = "80";
-    rio_t rio;
-    struct stat sbuf;
-
+void proxy(int connfd) {
     struct Request *req = (struct Request *)malloc(sizeof(struct Request));
 
-    parse_request(clientfd, req);
+    parse_request(connfd, req);
 
     int serverfd = Open_clientfd(req->host_addr, req->port);
 
@@ -75,36 +68,30 @@ void proxy(int clientfd) {
 
     free(req);
 
-    send_res_to_client(clientfd, serverfd);
+    send_res_to_client(connfd, serverfd);
 }
 
 static void parse_request(int clientfd, struct Request *req) {
-    int is_static;
-    char buf[MAXLINE];
-    char uri[MAXLINE], filename[MAXLINE], cgiargs[MAXLINE];
-    char default_port = "80";
+    char buf[MAXLINE] ,uri[MAXLINE];
+    char *default_port = "80";
     rio_t rio;
-    struct stat sbuf;
 
     Rio_readinitb(&rio, clientfd);
 
     if (Rio_readlineb(&rio, buf, MAXLINE) > 0) {
+        // Convert the final \r\n in the request to NULL
         char *null_ptr = strstr(buf, "\n");
         *null_ptr = '\0';
-        strcpy(req->request, buf);
 
+        strcpy(req->request, buf);
         sscanf(buf, "%s %s %s", req->method, uri, req->version);
     }
 
     // uri : http://csapp.cs.cmu.edu:80/index.html
-    // hostname: csapp.cs.cmu.edu
-    // hostname_port: 80
-    // path: /index.html
-
-    char hostname_port[MAXLINE];  // this is temp char for hostname and port
-    char path[MAXLINE];
-    char port[PORT_LEN];  // hostname_port is later divided into port and hostname
-    char hostname[MAXLINE];
+    char hostname_port[MAXLINE];  // csapp.cs.cmu.edu:80
+    char path[MAXLINE];           // /index.html
+    char port[PORT_LEN];          // 80
+    char hostname[MAXLINE];       // csapp.cs.cmu.edu
     char *uri_pt = uri;
 
     uri_pt = strstr(uri_pt, "://");
@@ -133,8 +120,11 @@ static void send_req_to_server(int serverfd, struct Request *req) {
     // send req to server
     if (strstr(req->method, "GET") != 0) {
         static char buf[MAXLINE];
+        /* --- Send HTTP request --- */
         sprintf(buf, "%s %s %s\r\n", req->method, req->path, req->version);
         Rio_writen(serverfd, buf, strlen(buf));
+
+        /* --- Send request header --- */
         sprintf(buf, "HOST: %s\r\n", req->host_addr);
         Rio_writen(serverfd, buf, strlen(buf));
         sprintf(buf, "%s", user_agent_hdr);
@@ -151,32 +141,18 @@ static int send_res_to_client(int clientfd, int serverfd) {
     socklen_t option_len = sizeof(buffer_size);
 
     if (getsockopt(serverfd, SOL_SOCKET, SO_RCVBUF, &buffer_size, &option_len) < 0) {
-    perror("getsockopt error");
-    // 에러 처리
-    } else {
-        printf("Receive buffer size: %d\n", buffer_size);
+        perror("getsockopt error");
     }
 
     char *buf = (char *)malloc(buffer_size);
-    char *res = (char *)malloc(buffer_size);
-    
-    res[0] = '\0';
-    int res_len = 0;
 
     int n = rio_readn(serverfd, buf, buffer_size);
-
     buf[buffer_size] = '\0';
 
-    if (res_len < MAX_OBJECT_SIZE) {
-        res_len += n;
-        if (res_len < MAX_OBJECT_SIZE) {
-            strcat(res, buf);
-        }
-        else {
-            res_len = MAX_OBJECT_SIZE;
-        }
+    if (rio_writen(clientfd, buf, n) < 0) {
+        free(buf);
+        return -1;
     }
 
-    if (rio_writen(clientfd, buf, n) < 0) {return -1;}
-    return res_len;
+    return n;
 }
