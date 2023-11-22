@@ -10,14 +10,6 @@
 #define VERSION_LEN 16
 #define PORT_LEN    32
 
-/* You won't lose style points for including this long line in your code */
-static const char *user_agent_hdr =
-    "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 "
-    "Firefox/10.0.3\r\n";
-
-static void proxy(int);
-static void parse_request(int, struct Request);
-
 struct Request {
     char request[MAXLINE];
     char method[METHOD_LEN];    // GET
@@ -26,6 +18,15 @@ struct Request {
     char path[MAXLINE];         // /hub/indexl.html
     char version[VERSION_LEN];  // HTTP/1.1
 };
+
+/* You won't lose style points for including this long line in your code */
+static const char *user_agent_hdr =
+    "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 "
+    "Firefox/10.0.3\r\n";
+
+static void proxy(int);
+static void parse_request(int, struct Request *);
+static void send_req_to_server(int, struct Request *);
 
 int main(int argc, char **argv) {
     int clientfd, listenfd, connfd = NULL;
@@ -44,8 +45,7 @@ int main(int argc, char **argv) {
 
     while (1) {
         clientlen = sizeof(clientaddr);
-        connfd = Accept(listenfd, (SA *)&clientaddr,
-                        &clientlen);  // line:netp:tiny:accept
+        connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
         Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port,
                     MAXLINE, 0);
         printf("Accepted connection from (%s, %s)\n", hostname, port);
@@ -58,28 +58,23 @@ int main(int argc, char **argv) {
 }
 
 void proxy(int clientfd) {
-    int serverfd, is_static;
+    int is_static;
     char buf_ser[MAXLINE], buf_cli[MAXLINE];
     char uri[MAXLINE], filename[MAXLINE], cgiargs[MAXLINE];
     char default_port = "80";
-    rio_t rio_client, rio_server;
-    struct Request *req;
+    rio_t rio;
     struct stat sbuf;
 
-    req = (struct Request *)malloc(sizeof(struct Request));
+    struct Request *req = (struct Request *)malloc(sizeof(struct Request));
 
     parse_request(clientfd, req);
 
-    // send req to server
-    if (req->method == "GET") {
-        static char buf[MAXLINE];
-        static char *request[MAXLINE];
+    int serverfd = Open_clientfd(req->host_addr, req->port);
 
-
-    }
+    send_req_to_server(serverfd, req);
 }
 
-void parse_request(int clientfd, struct Request *req) {
+static void parse_request(int clientfd, struct Request *req) {
     int is_static;
     char buf[MAXLINE];
     char uri[MAXLINE], filename[MAXLINE], cgiargs[MAXLINE];
@@ -90,9 +85,10 @@ void parse_request(int clientfd, struct Request *req) {
     Rio_readinitb(&rio, clientfd);
 
     if (Rio_readlineb(&rio, buf, MAXLINE) > 0) {
-        printf("Request headers: \n");
-        printf("%s", buf);
-        strncpy(req->request, buf, strlen(buf));
+        char *null_ptr = strstr(buf, "\n");
+        *null_ptr = '\0';
+        strcpy(req->request, buf);
+
         sscanf(buf, "%s %s %s", req->method, uri, req->version);
     }
 
@@ -127,5 +123,21 @@ void parse_request(int clientfd, struct Request *req) {
     } else {
         strncpy(req->port, port, strlen(port));
     }
-    printf("parse request done\n");
+}
+
+static void send_req_to_server(int serverfd, struct Request *req) {
+    // send req to server
+    if (strstr(req->method, "GET") != 0) {
+        static char buf[MAXLINE];
+        sprintf(buf, "%s\r\n", req->request);
+        Rio_writen(serverfd, buf, strlen(buf));
+        sprintf(buf, "HOST: %s\r\n", req->host_addr);
+        Rio_writen(serverfd, buf, strlen(buf));
+        sprintf(buf, "%s", user_agent_hdr);
+        Rio_writen(serverfd, buf, strlen(buf));
+        sprintf(buf, "Connection: close\r\n");
+        Rio_writen(serverfd, buf, strlen(buf));
+        sprintf(buf, "Proxy-Connection: close\r\n\r\n");
+        Rio_writen(serverfd, buf, strlen(buf));
+    }
 }
