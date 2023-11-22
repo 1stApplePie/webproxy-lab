@@ -1,5 +1,4 @@
 #include <stdio.h>
-
 #include "csapp.h"
 
 /* Recommended max cache and object sizes */
@@ -12,11 +11,11 @@
 
 struct Request {
     char request[MAXLINE];
-    char method[METHOD_LEN];    // GET
-    char host_addr[MAXLINE];    // www.cmu.edu
-    char port[PORT_LEN];        // default port: 80
-    char path[MAXLINE];         // /hub/indexl.html
-    char version[VERSION_LEN];  // HTTP/1.1
+    char method[METHOD_LEN];
+    char host_addr[MAXLINE];
+    char port[PORT_LEN];
+    char path[MAXLINE];
+    char version[VERSION_LEN];
 };
 
 /* You won't lose style points for including this long line in your code */
@@ -27,6 +26,7 @@ static const char *user_agent_hdr =
 static void proxy(int);
 static void parse_request(int, struct Request *);
 static void send_req_to_server(int, struct Request *);
+static int send_res_to_client(int, int);
 
 int main(int argc, char **argv) {
     int clientfd, listenfd, connfd = NULL;
@@ -72,6 +72,8 @@ void proxy(int clientfd) {
     int serverfd = Open_clientfd(req->host_addr, req->port);
 
     send_req_to_server(serverfd, req);
+
+    send_res_to_client(clientfd, serverfd);
 }
 
 static void parse_request(int clientfd, struct Request *req) {
@@ -140,4 +142,29 @@ static void send_req_to_server(int serverfd, struct Request *req) {
         sprintf(buf, "Proxy-Connection: close\r\n\r\n");
         Rio_writen(serverfd, buf, strlen(buf));
     }
+}
+
+static int send_res_to_client(int clientfd, int serverfd) {
+    char buf[MAXLINE] = "\0";
+    char res[MAXLINE];
+    res[0] = '\0';
+    int res_len = 0;
+    int n = rio_readn(serverfd, buf, MAXLINE);
+
+    while(n != 0) {
+        buf[n] = '\0';
+
+        if (res_len < MAX_OBJECT_SIZE) {
+            res_len += n;
+            if (res_len < MAX_OBJECT_SIZE) {
+                strcat(res, buf);
+            }
+            else {
+                res_len = MAX_OBJECT_SIZE;
+            }
+        }
+
+        if (rio_writen(clientfd, buf, n) < 0) {return -1;}
+    }
+    return res_len;
 }
