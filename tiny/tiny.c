@@ -55,7 +55,7 @@ void doit(int fd) {
     printf("Request headers: \n");
     printf("%s", buf);
     
-    // HTTP 요청 scan
+    // HTTP GET 요청 scan
     sscanf(buf, "%s %s %s", method, uri, version);
     if (!strcasecmp(method, "GET") && !strcasecmp(method, "HEAD")) {
         clienterror(fd, method, "501", "Not implemented",
@@ -64,9 +64,10 @@ void doit(int fd) {
     }
     read_requesthdrs(&rio);
 
+    printf("HTTP method: %s\n", method);
+
     if (strcasecmp(method, "GET") == 0) {
         /* Parse URI from GET request */
-        // uri에 cgi-bin 포함 여부로 정적, 동적 컨텐츠로 구분
         is_static = parse_uri(uri, filename, cgiargs);
         if (stat(filename, &sbuf) < 0) {
             clienterror(fd, filename, "404", "Not found",
@@ -75,10 +76,6 @@ void doit(int fd) {
         }
 
         if (is_static) { /*Serve static content */
-            // #define S_IRUSR 0400 // 소유자 읽기 권한
-            // #define S_IXUSR 0100 // 소유자 실행 권한
-            // S_ISREG(sbuf.st_mode): 파일이 일반 파일인지 검사
-            // S_IRUSR & sbuf.st_mode: 파일 소유자에 대한 읽기 권한 검사
             if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
                 clienterror(fd, filename, "403", "Forbidden",
                             " Tiny couldn't read the file");
@@ -86,7 +83,6 @@ void doit(int fd) {
             }
             serve_static(fd, filename, sbuf.st_size);
         } else { /* Serve dynamic content */
-            // !(S_IXUSR & sbuf.st_mode): 파일 소유자에게 실행 권한이 있는지 검사
             if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
                 clienterror(fd, filename, "403", "Forbidden",
                             "Tiny couldn't run the CGI program");
@@ -135,12 +131,6 @@ void read_requesthdrs(rio_t *rp) {
 
 int parse_uri(char *uri, char *filename, char *cgiargs) {
     char *ptr;
-
-    /*
-    * char *strstr(const char *haystack, const char *needle);
-      * C언어에서 특정 부분 문자열을 찾는 함수
-      * 문자열에서 지정된 부분 문자열이 처음으로 발견되는 위치를 반환
-    */
     if (!strstr(uri, "cgi-bin")) { /* Static content */
         strcpy(cgiargs, "");
         strcpy(filename, ".");
