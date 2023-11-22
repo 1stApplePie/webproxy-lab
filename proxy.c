@@ -52,8 +52,8 @@ int main(int argc, char **argv) {
 
         proxy(connfd);
     }
-    Close(connfd);
 
+    Close(connfd);
     return 0;
 }
 
@@ -151,20 +151,18 @@ static int send_res_to_client(int clientfd, int serverfd) {
     int res_len = 0;
     int n = rio_readn(serverfd, buf, MAXLINE);
 
-    while(n != 0) {
-        buf[n] = '\0';
+    buf[n] = '\0';
 
+    if (res_len < MAX_OBJECT_SIZE) {
+        res_len += n;
         if (res_len < MAX_OBJECT_SIZE) {
-            res_len += n;
-            if (res_len < MAX_OBJECT_SIZE) {
-                strcat(res, buf);
-            }
-            else {
-                res_len = MAX_OBJECT_SIZE;
-            }
+            strcat(res, buf);
         }
-
-        if (rio_writen(clientfd, buf, n) < 0) {return -1;}
+        else {
+            res_len = MAX_OBJECT_SIZE;
+        }
     }
+
+    if (rio_writen(clientfd, buf, n) < 0) {return -1;}
     return res_len;
 }
