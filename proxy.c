@@ -73,6 +73,8 @@ void proxy(int clientfd) {
 
     send_req_to_server(serverfd, req);
 
+    free(req);
+
     send_res_to_client(clientfd, serverfd);
 }
 
@@ -117,8 +119,8 @@ static void parse_request(int clientfd, struct Request *req) {
     //"%[^:]" indicates the string can contain any charater other than ':'
     sscanf(hostname_port, "%[^:]:%s", hostname, port);
 
-    strncpy(req->host_addr, hostname, strlen(hostname));
-    strncpy(req->path, path, strlen(path));
+    strcpy(req->host_addr, hostname);
+    strcpy(req->path, path);
 
     if (strlen(port) == 0) {
         strcpy(req->port, default_port);
@@ -131,7 +133,7 @@ static void send_req_to_server(int serverfd, struct Request *req) {
     // send req to server
     if (strstr(req->method, "GET") != 0) {
         static char buf[MAXLINE];
-        sprintf(buf, "%s\r\n", req->request);
+        sprintf(buf, "%s %s %s\r\n", req->method, req->path, req->version);
         Rio_writen(serverfd, buf, strlen(buf));
         sprintf(buf, "HOST: %s\r\n", req->host_addr);
         Rio_writen(serverfd, buf, strlen(buf));
