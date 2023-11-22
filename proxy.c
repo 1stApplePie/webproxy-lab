@@ -147,13 +147,25 @@ static void send_req_to_server(int serverfd, struct Request *req) {
 }
 
 static int send_res_to_client(int clientfd, int serverfd) {
-    char buf[MAXLINE] = "\0";
-    char res[MAXLINE];
+    int buffer_size;
+    socklen_t option_len = sizeof(buffer_size);
+
+    if (getsockopt(serverfd, SOL_SOCKET, SO_RCVBUF, &buffer_size, &option_len) < 0) {
+    perror("getsockopt error");
+    // 에러 처리
+    } else {
+        printf("Receive buffer size: %d\n", buffer_size);
+    }
+
+    char *buf = (char *)malloc(buffer_size);
+    char *res = (char *)malloc(buffer_size);
+    
     res[0] = '\0';
     int res_len = 0;
-    int n = rio_readn(serverfd, buf, MAXLINE);
 
-    buf[n] = '\0';
+    int n = rio_readn(serverfd, buf, buffer_size);
+
+    buf[buffer_size] = '\0';
 
     if (res_len < MAX_OBJECT_SIZE) {
         res_len += n;
